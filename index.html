@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PID Control Demo</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #d1d5db;
+      --accent: #2563eb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .container {
+      max-width: 1450px;
+      margin: 20px auto;
+      padding: 0 16px;
+    }
+
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.04);
+    }
+
+    .section-title {
+      font-size: 18px;
+      margin: 0 0 12px 0;
+    }
+
+    .control-group {
+      margin-bottom: 16px;
+    }
+
+    .control-group label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    input[type="range"] {
+      flex: 1;
+    }
+
+    input[type="number"] {
+      width: 95px;
+      padding: 6px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      background: var(--accent);
+      color: white;
+    }
+
+    button.secondary {
+      background: #475569;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .stat {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    canvas {
+      width: 100%;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: block;
+    }
+
+    .plot-stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .instructions {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #374151;
+    }
+
+    .small {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .note-box {
+      margin-top: 10px;
+      padding: 10px;
+      background: #eff6ff;
+      border: 1px solid #93c5fd;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .run-box {
+      margin-top: 12px;
+      padding: 10px;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    @media (max-width: 950px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PID Control Demo</h1>
+    <div class="subtitle">
+      Tune Kp, Ki, and Kd to track a 3-level setpoint profile over a fixed simulation.
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2 class="section-title">Controls</h2>
+
+        <div class="control-group">
+          <label for="kp">Kp</label>
+          <div class="row">
+            <input type="range" id="kp" min="0" max="40" step="0.1" value="0" />
+            <input type="number" id="kpNum" min="0" max="40" step="0.1" value="0" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label for="ki">Ki</label>
+          <div class="row">
+            <input type="range" id="ki" min="0" max="3" step="0.01" value="0" />
+            <input type="number" id="kiNum" min="0" max="3" step="0.01" value="0" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label for="kd">Kd</label>
+          <div class="row">
+            <input type="range" id="kd" min="0" max="20" step="0.1" value="0" />
+            <input type="number" id="kdNum" min="0" max="20" step="0.1" value="0" />
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label for="initialTemp">Initial Output / Process Value</label>
+          <div class="row">
+            <input type="range" id="initialTemp" min="0" max="100" step="0.5" value="25" />
+            <input type="number" id="initialTempNum" min="0" max="100" step="0.5" value="25" />
+          </div>
+        </div>
+
+        <div class="note-box">
+          Fixed setpoint profile:
+          <br>• Setpoint 1 = 20
+          <br>• Setpoint 2 = 50
+          <br>• Setpoint 3 = 30
+        </div>
+
+        <div class="button-row">
+          <button id="startBtn">Start</button>
+          <button id="resetBtn" class="secondary">Reset</button>
+        </div>
+
+        <div class="run-box">
+          Full simulated run time on screen:
+          <b><span id="runDurationLabel">10</span> seconds</b>
+        </div>
+
+        <div class="note-box">
+          Controller details:
+          <br>• 3-level piecewise setpoint profile
+          <br>• No disturbance
+          <br>• Derivative on measurement with filtering
+          <br>• Anti-windup integral
+          <br>• Same scoring logic as your previous version
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Current Output</div>
+            <div class="stat-value" id="currentTemp">25.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Current Setpoint</div>
+            <div class="stat-value" id="currentSetpoint">20.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Positive Control</div>
+            <div class="stat-value" id="heaterOutput">0.0 %</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Negative Control</div>
+            <div class="stat-value" id="coolerOutput">0.0 %</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Simulated Time</div>
+            <div class="stat-value" id="timeNow">0.0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">IAE</div>
+            <div class="stat-value" id="iaeValue">0.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Overshoot Penalty</div>
+            <div class="stat-value" id="overshootValue">0.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Control Effort</div>
+            <div class="stat-value" id="effortValue">0.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Total Cost J</div>
+            <div class="stat-value" id="costValue">0.00</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Score</div>
+            <div class="stat-value" id="scoreValue">0.00</div>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div class="instructions">
+            Winner metric:
+            <br>
+            J = 1.0 × IAE + 2.0 × Overshoot Penalty + 0.2 × Control Effort
+            <br><br>
+            Score = 10000 / (1 + J)
+            <br><br>
+            Lower J is better. Higher Score is better.
+          </div>
+        </div>
+      </div>
+
+      <div class="plot-stack">
+        <div class="card">
+          <h2 class="section-title">Output Response</h2>
+          <canvas id="mainPlot" width="980" height="420"></canvas>
+          <div class="small" style="margin-top:8px;">
+            Solid lines: process output and stepped setpoint.
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title">Positive Control Output (%)</h2>
+          <canvas id="heaterPlot" width="980" height="220"></canvas>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title">Negative Control Output (%)</h2>
+          <canvas id="coolerPlot" width="980" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================================================
+    // MAIN VARIABLES
+    // =====================================================
+
+    const SETPOINT_1 = 20;
+    const SETPOINT_2 = 50;
+    const SETPOINT_3 = 30;
+
+
+    const RUN_DURATION_SECONDS = 10;
+
+    const HEATER_EFFECT_SCALE = 10.0;
+    const COOLER_EFFECT_SCALE = 10.0;
+
+    const HEATER_BASE_STRENGTH = 2.0;
+    const COOLER_BASE_STRENGTH = 2.0;
+
+    // Process dynamics
+    const TOTAL_HOURS = 48.0;
+    const DT_HOURS = 0.02;
+    const AMBIENT_TEMP = 0.0;
+
+    const ACTUATOR_TIME_CONSTANT_HR = 0.35;
+    const CONTROL_DELAY_HR = 0.35;
+    const PASSIVE_LOSS_COEFF = 0.05;
+    const THERMAL_MASS_FACTOR = 0.55;
+
+    // PID implementation
+    const DERIVATIVE_FILTER_ALPHA = 0.7;
+    const INTEGRAL_MIN = -150;
+    const INTEGRAL_MAX = 150;
+
+    const TOTAL_STEPS = Math.ceil(TOTAL_HOURS / DT_HOURS);
+    const TARGET_FPS = 60;
+    const STEPS_PER_FRAME = Math.max(
+      1,
+      Math.ceil(TOTAL_STEPS / (RUN_DURATION_SECONDS * TARGET_FPS))
+    );
+    const CONTROL_DELAY_STEPS = Math.max(1, Math.round(CONTROL_DELAY_HR / DT_HOURS));
+
+    document.getElementById("runDurationLabel").textContent = RUN_DURATION_SECONDS;
+
+    // -----------------------------
+    // DOM
+    // -----------------------------
+    const kp = document.getElementById("kp");
+    const ki = document.getElementById("ki");
+    const kd = document.getElementById("kd");
+    const kpNum = document.getElementById("kpNum");
+    const kiNum = document.getElementById("kiNum");
+    const kdNum = document.getElementById("kdNum");
+
+    const initialTemp = document.getElementById("initialTemp");
+    const initialTempNum = document.getElementById("initialTempNum");
+
+    const startBtn = document.getElementById("startBtn");
+    const resetBtn = document.getElementById("resetBtn");
+
+    const currentTempEl = document.getElementById("currentTemp");
+    const currentSetpointEl = document.getElementById("currentSetpoint");
+    const heaterOutputEl = document.getElementById("heaterOutput");
+    const coolerOutputEl = document.getElementById("coolerOutput");
+    const timeNowEl = document.getElementById("timeNow");
+    const iaeValueEl = document.getElementById("iaeValue");
+    const overshootValueEl = document.getElementById("overshootValue");
+    const effortValueEl = document.getElementById("effortValue");
+    const costValueEl = document.getElementById("costValue");
+    const scoreValueEl = document.getElementById("scoreValue");
+
+    const mainCanvas = document.getElementById("mainPlot");
+    const heaterCanvas = document.getElementById("heaterPlot");
+    const coolerCanvas = document.getElementById("coolerPlot");
+
+    const mainCtx = mainCanvas.getContext("2d");
+    const heaterCtx = heaterCanvas.getContext("2d");
+    const coolerCtx = coolerCanvas.getContext("2d");
+
+    // -----------------------------
+    // Sync slider-number pairs
+    // -----------------------------
+    function bindPair(slider, numberInput) {
+      slider.addEventListener("input", () => {
+        numberInput.value = slider.value;
+        if (!simRunning) {
+          if (slider === initialTemp) {
+            processValue = parseFloat(initialTemp.value);
+            previousValue = processValue;
+          }
+          updateStats();
+          drawAllPlots();
+        }
+      });
+
+      numberInput.addEventListener("input", () => {
+        slider.value = numberInput.value;
+        if (!simRunning) {
+          if (slider === initialTemp) {
+            processValue = parseFloat(initialTemp.value);
+            previousValue = processValue;
+          }
+          updateStats();
+          drawAllPlots();
+        }
+      });
+    }
+
+    bindPair(kp, kpNum);
+    bindPair(ki, kiNum);
+    bindPair(kd, kdNum);
+    bindPair(initialTemp, initialTempNum);
+
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    function clamp(v, min, max) {
+      return Math.max(min, Math.min(max, v));
+    }
+
+    function getSetpointAtTime(hour) {
+      const firstBoundary = TOTAL_HOURS / 3;
+      const secondBoundary = 2 * TOTAL_HOURS / 3;
+
+      if (hour < firstBoundary) return SETPOINT_1;
+      if (hour < secondBoundary) return SETPOINT_2;
+      return SETPOINT_3;
+    }
+
+    // -----------------------------
+    // State
+    // -----------------------------
+    let simRunning = false;
+    let animationId = null;
+
+    let simHour = 0.0;
+    let processValue = parseFloat(initialTemp.value);
+
+    let positiveCommand = 0.0;
+    let negativeCommand = 0.0;
+
+    let positiveActual = 0.0;
+    let negativeActual = 0.0;
+
+    let controlDelayQueuePositive = [];
+    let controlDelayQueueNegative = [];
+
+    let integral = 0.0;
+    let previousValue = parseFloat(initialTemp.value);
+    let filteredMeasurementDerivative = 0.0;
+
+    let iae = 0.0;
+    let overshootPenalty = 0.0;
+    let controlEffort = 0.0;
+    let totalCost = 0.0;
+
+    let history = [];
+
+    // -----------------------------
+    // Reset
+    // -----------------------------
+    function resetSimulation() {
+      simRunning = false;
+      cancelAnimationFrame(animationId);
+
+      simHour = 0.0;
+      processValue = parseFloat(initialTemp.value);
+
+      positiveCommand = 0.0;
+      negativeCommand = 0.0;
+      positiveActual = 0.0;
+      negativeActual = 0.0;
+
+      controlDelayQueuePositive = Array(CONTROL_DELAY_STEPS).fill(0);
+      controlDelayQueueNegative = Array(CONTROL_DELAY_STEPS).fill(0);
+
+      integral = 0.0;
+      previousValue = processValue;
+      filteredMeasurementDerivative = 0.0;
+
+      iae = 0.0;
+      overshootPenalty = 0.0;
+      controlEffort = 0.0;
+      totalCost = 0.0;
+
+      history = [];
+
+      updateStats();
+      drawAllPlots();
+      unlockControls();
+    }
+
+    function lockControls() {
+      kp.disabled = true;
+      ki.disabled = true;
+      kd.disabled = true;
+      kpNum.disabled = true;
+      kiNum.disabled = true;
+      kdNum.disabled = true;
+
+      initialTemp.disabled = true;
+      initialTempNum.disabled = true;
+
+      
+    }
+
+    function unlockControls() {
+      kp.disabled = false;
+      ki.disabled = false;
+      kd.disabled = false;
+      kpNum.disabled = false;
+      kiNum.disabled = false;
+      kdNum.disabled = false;
+
+      initialTemp.disabled = false;
+      initialTempNum.disabled = false;
+
+    }
+
+    // -----------------------------
+    // Simulation step
+    // -----------------------------
+    function simulateStep() {
+      const Kp = parseFloat(kp.value);
+      const Ki = parseFloat(ki.value);
+      const Kd = parseFloat(kd.value);
+      const sp = getSetpointAtTime(simHour);
+
+      const error = sp - processValue;
+
+      const measurementDerivative = (processValue - previousValue) / DT_HOURS;
+      previousValue = processValue;
+
+      filteredMeasurementDerivative =
+        DERIVATIVE_FILTER_ALPHA * filteredMeasurementDerivative +
+        (1 - DERIVATIVE_FILTER_ALPHA) * measurementDerivative;
+
+      const pTerm = Kp * error;
+      const dTerm = -Kd * filteredMeasurementDerivative;
+
+      let integralCandidate = integral + error * DT_HOURS;
+      integralCandidate = clamp(integralCandidate, INTEGRAL_MIN, INTEGRAL_MAX);
+
+      const uUnsatCandidate = pTerm + Ki * integralCandidate + dTerm;
+
+      let acceptIntegral = false;
+
+      if (uUnsatCandidate > -100 && uUnsatCandidate < 100) {
+        acceptIntegral = true;
+      } else if (uUnsatCandidate >= 100 && error < 0) {
+        acceptIntegral = true;
+      } else if (uUnsatCandidate <= -100 && error > 0) {
+        acceptIntegral = true;
+      }
+
+      if (acceptIntegral) {
+        integral = integralCandidate;
+      }
+
+      const uUnsat = pTerm + Ki * integral + dTerm;
+
+      positiveCommand = clamp(uUnsat, 0, 100);
+      negativeCommand = clamp(-uUnsat, 0, 100);
+
+      controlDelayQueuePositive.push(positiveCommand);
+      controlDelayQueueNegative.push(negativeCommand);
+
+      const delayedPositiveCmd = controlDelayQueuePositive.shift();
+      const delayedNegativeCmd = controlDelayQueueNegative.shift();
+
+      const actuatorAlpha = DT_HOURS / (ACTUATOR_TIME_CONSTANT_HR + DT_HOURS);
+      positiveActual += actuatorAlpha * (delayedPositiveCmd - positiveActual);
+      negativeActual += actuatorAlpha * (delayedNegativeCmd - negativeActual);
+
+      const positiveEffect =
+        HEATER_EFFECT_SCALE * HEATER_BASE_STRENGTH * (positiveActual / 100.0);
+
+      const negativeEffect =
+        COOLER_EFFECT_SCALE * COOLER_BASE_STRENGTH * (negativeActual / 100.0);
+
+      const passiveLoss = PASSIVE_LOSS_COEFF * (processValue - AMBIENT_TEMP);
+
+      const dYdt =
+        (positiveEffect - negativeEffect - passiveLoss) * THERMAL_MASS_FACTOR;
+
+      processValue += dYdt * DT_HOURS;
+
+      iae += Math.abs(error) * DT_HOURS;
+
+      const overshoot = Math.max(0, processValue - sp);
+      overshootPenalty += overshoot * DT_HOURS;
+
+      controlEffort += (positiveActual + negativeActual) * DT_HOURS * 0.01;
+
+      totalCost =
+        1.0 * iae +
+        2.0 * overshootPenalty +
+        0.2 * controlEffort;
+
+      history.push({
+        t: simHour,
+        output: processValue,
+        setpoint: sp,
+        positive: positiveActual,
+        negative: negativeActual
+      });
+
+      simHour += DT_HOURS;
+    }
+
+    // -----------------------------
+    // Stats
+    // -----------------------------
+    function updateStats() {
+      currentTempEl.textContent = processValue.toFixed(2);
+      currentSetpointEl.textContent = getSetpointAtTime(Math.min(simHour, TOTAL_HOURS)).toFixed(2);
+      heaterOutputEl.textContent = positiveActual.toFixed(1) + " %";
+      coolerOutputEl.textContent = negativeActual.toFixed(1) + " %";
+      timeNowEl.textContent = Math.min(simHour, TOTAL_HOURS).toFixed(1);
+      iaeValueEl.textContent = iae.toFixed(2);
+      overshootValueEl.textContent = overshootPenalty.toFixed(2);
+      effortValueEl.textContent = controlEffort.toFixed(2);
+      costValueEl.textContent = totalCost.toFixed(2);
+      scoreValueEl.textContent = (10000 / (1 + totalCost)).toFixed(2);
+    }
+
+    // -----------------------------
+    // Plot helpers
+    // -----------------------------
+    function drawAxes(ctx, canvas, yMin, yMax, yLabel) {
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const left = 55;
+      const right = 20;
+      const top = 20;
+      const bottom = 40;
+      const plotW = w - left - right;
+      const plotH = h - top - bottom;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(left, top, plotW, plotH);
+
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(left, top, plotW, plotH);
+
+      for (let i = 0; i <= 6; i++) {
+        const y = top + (i / 6) * plotH;
+        ctx.strokeStyle = "#e5e7eb";
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(left + plotW, y);
+        ctx.stroke();
+
+        const val = yMax - (i / 6) * (yMax - yMin);
+        ctx.fillStyle = "#6b7280";
+        ctx.font = "12px Arial";
+        ctx.fillText(val.toFixed(0), 10, y + 4);
+      }
+
+      for (let i = 0; i <= 8; i++) {
+        const x = left + (i / 8) * plotW;
+        ctx.strokeStyle = "#e5e7eb";
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, top + plotH);
+        ctx.stroke();
+
+        const hour = (i / 8) * TOTAL_HOURS;
+        ctx.fillStyle = "#6b7280";
+        ctx.font = "12px Arial";
+        ctx.fillText(hour.toFixed(0), x - 6, top + plotH + 18);
+      }
+
+      ctx.fillStyle = "#111827";
+      ctx.font = "13px Arial";
+      ctx.fillText(yLabel, 8, 14);
+      ctx.fillText("Time", left + plotW / 2 - 15, h - 10);
+
+      return {
+        left, top, plotW, plotH,
+        xScale: (t) => left + (t / TOTAL_HOURS) * plotW,
+        yScale: (v) => top + ((yMax - v) / (yMax - yMin)) * plotH
+      };
+    }
+
+    function drawLine(ctx, data, xScale, yScale, getter, color, width = 2, dashed = false) {
+      if (data.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dashed ? [8, 5] : []);
+      ctx.beginPath();
+      for (let i = 0; i < data.length; i++) {
+        const x = xScale(data[i].t);
+        const y = yScale(getter(data[i]));
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawLegend(ctx, items, startX, startY) {
+      ctx.font = "12px Arial";
+      items.forEach((item, idx) => {
+        const y = startY + idx * 18;
+        ctx.save();
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = 3;
+        ctx.setLineDash(item.dashed ? [8, 5] : []);
+        ctx.beginPath();
+        ctx.moveTo(startX, y);
+        ctx.lineTo(startX + 20, y);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = "#111827";
+        ctx.fillText(item.label, startX + 28, y + 4);
+      });
+    }
+
+    // -----------------------------
+    // Plots
+    // -----------------------------
+    function getPlotMinMax() {
+      const candidates = [
+        parseFloat(initialTemp.value),
+        SETPOINT_1,
+        SETPOINT_2,
+        SETPOINT_3
+      ];
+
+      history.forEach(p => candidates.push(p.output));
+
+      const minVal = Math.min(...candidates);
+      const maxVal = Math.max(...candidates);
+
+      return {
+        min: Math.floor(minVal - 10),
+        max: Math.ceil(maxVal + 10)
+      };
+    }
+
+    function drawMainPlot() {
+      const bounds = getPlotMinMax();
+      const scales = drawAxes(mainCtx, mainCanvas, bounds.min, bounds.max, "Output");
+      const { xScale, yScale, left, top } = scales;
+
+      const fullProfile = [];
+      for (let h = 0; h <= TOTAL_HOURS + 0.0001; h += DT_HOURS) {
+        fullProfile.push({
+          t: h,
+          setpoint: getSetpointAtTime(h)
+        });
+      }
+
+      drawLine(mainCtx, fullProfile, xScale, yScale, p => p.setpoint, "#dc2626", 2, false);
+      drawLine(mainCtx, history, xScale, yScale, p => p.output, "#2563eb", 2.5, false);
+
+      drawLegend(mainCtx, [
+        { color: "#2563eb", label: "Process Output", dashed: false },
+        { color: "#dc2626", label: "Setpoint", dashed: false }
+      ], left + 10, top + 14);
+    }
+
+    function drawHeaterPlot() {
+      const scales = drawAxes(heaterCtx, heaterCanvas, 0, 100, "Positive (%)");
+      drawLine(heaterCtx, history, scales.xScale, scales.yScale, p => p.positive, "#ef4444", 2.5, false);
+      drawLegend(heaterCtx, [
+        { color: "#ef4444", label: "Positive Control", dashed: false }
+      ], scales.left + 10, scales.top + 14);
+    }
+
+    function drawCoolerPlot() {
+      const scales = drawAxes(coolerCtx, coolerCanvas, 0, 100, "Negative (%)");
+      drawLine(coolerCtx, history, scales.xScale, scales.yScale, p => p.negative, "#06b6d4", 2.5, false);
+      drawLegend(coolerCtx, [
+        { color: "#06b6d4", label: "Negative Control", dashed: false }
+      ], scales.left + 10, scales.top + 14);
+    }
+
+    function drawAllPlots() {
+      drawMainPlot();
+      drawHeaterPlot();
+      drawCoolerPlot();
+    }
+
+    // -----------------------------
+    // Animation
+    // -----------------------------
+    function animate() {
+      if (!simRunning) {
+        drawAllPlots();
+        return;
+      }
+
+      for (let i = 0; i < STEPS_PER_FRAME; i++) {
+        if (!simRunning) break;
+
+        simulateStep();
+
+        if (simHour >= TOTAL_HOURS) {
+          simRunning = false;
+          unlockControls();
+          break;
+        }
+      }
+
+      updateStats();
+      drawAllPlots();
+
+      if (simRunning) {
+        animationId = requestAnimationFrame(animate);
+      }
+    }
+
+    // -----------------------------
+    // Buttons
+    // -----------------------------
+    startBtn.addEventListener("click", () => {
+      resetSimulation();
+      lockControls();
+      simRunning = true;
+      animationId = requestAnimationFrame(animate);
+    });
+
+    resetBtn.addEventListener("click", () => {
+      resetSimulation();
+    });
+
+    // -----------------------------
+    // Init
+    // -----------------------------
+    resetSimulation();
+  </script>
+</body>
+</html>
